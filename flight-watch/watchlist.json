@@ -1,0 +1,34 @@
+{
+  "entries": [
+    {
+      "id": "demo01",
+      "note": "示例：悉尼→新加坡。照 README 第 5 步改成你自己的航线",
+      "enabled": true,
+      "origin": "SYD",
+      "destination": "SIN",
+      "from": "2027-02-10",
+      "to": "2027-02-14",
+      "max_price": 250,
+      "max_stops": 1,
+      "allow_self_transfer": false,
+      "need_bag": false,
+      "adults": 1,
+      "depart_slots": [],
+      "exclude": [],
+      "transfer_pref": "cheap",
+      "max_duration_h": null,
+      "max_layover_h": null,
+      "stopover_city": "",
+      "stopover_min_h": 12,
+      "stopover_max_h": 48,
+      "promo_code": "",
+      "auto_prepare": false,
+      "snipe_at": ""
+    }
+  ],
+  "settings": {
+    "passenger_name": "改成你护照上的英文名",
+    "report_hour": 21
+  },
+  "updated": "2026-10-18T00:00:00"
+}

@@ -1,0 +1,74 @@
+name: flight-watch
+
+# 机票盯价：每 1.5 小时查一次 Trip.com，跌破理想价推到手机，每晚发一张价格曲线日报。
+# 改了 flight-watch/watchlist.json（航线清单）会马上查一次。
+on:
+  schedule:
+    # 每 1.5 小时一次：两条定时交错（UTC 时间 0:23、1:53、3:23、4:53……）。
+    # GitHub 的定时可能晚几十分钟，属正常。想改成每 2 小时：删掉第二行，第一行改成 "23 */2 * * *"
+    - cron: "23 0-21/3 * * *"
+    - cron: "53 1-22/3 * * *"
+  workflow_dispatch:            # Actions 页面上的「Run workflow」按钮：手动查一次
+  push:
+    branches: [main]
+    paths: [flight-watch/watchlist.json]
+
+concurrency:
+  group: flight-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    # 原始项目仓库本身不运行，只在你复制过去的仓库里运行
+    if: github.repository_owner != 'liuyongbendan-web'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TZ: Australia/Sydney      # 日报时间、出发时段都按这个时区算
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: .github/workflows/flight-watch.yml
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.59.0-chromium
+
+      - name: Install
+        run: |
+          pip install -q playwright==1.59.0 matplotlib==3.11.2
+          python -m playwright install --with-deps chromium
+          if [ "$(date +%H)" -ge 20 ]; then sudo apt-get install -y -qq fonts-noto-cjk >/dev/null; fi
+
+      - name: Check prices
+        env:
+          FW_WEBHOOK_URL: ${{ secrets.FW_WEBHOOK_URL }}
+        run: |
+          if [ -z "$FW_WEBHOOK_URL" ]; then
+            echo "::error::还没设置推送地址：到 Settings > Secrets and variables > Actions 添加 FW_WEBHOOK_URL（见 README 第 4 步）。"
+            exit 1
+          fi
+          case "$FW_WEBHOOK_URL" in
+            https://*) ;;
+            *) echo "::error::FW_WEBHOOK_URL 应该是 https://ntfy.sh/你的主题名 这样的网址，请重新设置（见 README 第 4 步）。"; exit 1 ;;
+          esac
+          python flight-watch/cloud/cloud_run.py
+
+      - name: Save results
+        if: always()
+        run: |
+          git config user.name "flight-watch-cloud"
+          git config user.email "actions@users.noreply.github.com"
+          git add flight-watch/cloud-data flight-watch/status.json
+          git diff --cached --quiet && exit 0
+          git commit -qm "机票盯价：查价结果"
+          for i in 1 2 3; do git pull -q --rebase && git push -q && exit 0; sleep 5; done
+          exit 1
