@@ -24,7 +24,7 @@ jobs:
   check:
     # 原始项目仓库本身不运行，只在你复制过去的仓库里运行
     if: github.repository_owner != 'liuyongbendan-web'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04     # 别用 ubuntu-latest：2026-10 它升到 26.04，Playwright 1.59 不支持，装浏览器那步会失败
     timeout-minutes: 25
     env:
       TZ: Australia/Sydney      # 日报时间、出发时段都按这个时区算

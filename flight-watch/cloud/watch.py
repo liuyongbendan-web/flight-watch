@@ -459,7 +459,30 @@ def _pulled_recently():
     return time.time() - _last_pull_ok[0] < 15 * 60
 
 
-def maybe_notify(entry, best, sent, passenger="乘机人", urgent=False, send=True):
+LOW_WINDOW = timedelta(days=7)
+LOW_MIN_DROP = 2          # 默认值；每条清单可在 low_margin 里自己设
+
+
+def recent_low(entry, now=None):
+    """这条清单过去 7 天、每轮查价里出现过的最低价。没有历史（刚添加）返回 None。
+
+    必须在本轮 record_history 之前调用，否则本轮自己的价格会被算进去。
+    """
+    now = now or datetime.now()
+    prices = []
+    try:
+        with open(HISTORY) as f:
+            for r in csv.DictReader(f):
+                if r.get("entry_id") != entry["id"]:
+                    continue
+                if datetime.fromisoformat(r["checked_at"]) >= now - LOW_WINDOW:
+                    prices.append(float(r["price"]))
+    except (OSError, ValueError, KeyError):
+        return None
+    return min(prices) if prices else None
+
+
+def maybe_notify(entry, best, sent, passenger="乘机人", urgent=False, send=True, week_low=None):
     """同一天同一条信息只发一次；只有新日期、或比上次推送更便宜才再报。
 
     Trip.com 会拦截自动化浏览器的下单流程，所以这里不替你下单，
@@ -472,10 +495,16 @@ def maybe_notify(entry, best, sent, passenger="乘机人", urgent=False, send=Tr
     if best.get("stopover"):
         key = f"{entry['origin']}-{best['stopover']['city']}-{entry['destination']}|{best['date']}"
     last = sent.get(key)
-    if last and best["price"] >= last["price"] - 5:
+    # 两种情况会推：比上次推送再便宜 ≥A$5；或者创了过去 7 天的新低（比这 7 天任何一次都低）
+    margin = entry.get("low_margin")
+    margin = LOW_MIN_DROP if margin is None else margin
+    new_low = week_low is not None and (best["price"] < week_low if margin <= 0 else best["price"] <= week_low - margin)
+    if last and best["price"] >= last["price"] - 5 and not new_low:
         return False
     if best.get("stopover", {}).get("kind") == "two_tickets":
         title, body, click = _stopover_message(entry, best, passenger)
+        if new_low:
+            title += f" 🔻7天新低（前低 {week_low:.0f}）"
         if send:
             push(title, body, click=click, priority="urgent" if urgent else "high")
         sent[key] = {"price": best["price"], "at": datetime.now().isoformat(timespec="minutes")}
@@ -484,6 +513,8 @@ def maybe_notify(entry, best, sent, passenger="乘机人", urgent=False, send=Tr
 
     route = f"{entry['origin']}→{entry['destination']}"
     title = f"✈️ {route} {best['date'][5:]} A${best['price']:.0f}（理想价 {entry['max_price']:.0f}）"
+    if new_low:
+        title += f" 🔻7天新低（前低 {week_low:.0f}）"
     tags = []
     tags.append("直飞" if best["stops"] == 0 else f"{best['stops']}转 经{best['via']}")
     tags.append("含托运" if best["checked_baggage"] else "仅手提")
@@ -669,6 +700,7 @@ def check_once(verbose=False):
             results[entry["id"]] = {**results.get(entry["id"], {}), "error": str(e),
                                     "checked_at": datetime.now().isoformat(timespec="minutes")}
             continue
+        week_low = recent_low(entry)      # 先取，再写入本轮记录
         record_history(entry, r["per_day"])
         best = r.get("best")
         if verbose or best:
@@ -682,7 +714,7 @@ def check_once(verbose=False):
         try:
             # 云端在跑时，推送由云端发；Mac 只负责「自动备好下单页」，自己不再推，免得重复
             if maybe_notify(entry, best, sent, passenger=data["settings"].get("passenger_name", "乘机人"),
-                            send=CLOUD or not cloud_alive()):
+                            send=CLOUD or not cloud_alive(), week_low=week_low):
                 save_json(SENT, sent)
                 if entry.get("auto_prepare") and not CLOUD and not best.get("stopover"):
                     save_json(STATE, state)   # prepare.py 从 state 读这一班，必须先落盘

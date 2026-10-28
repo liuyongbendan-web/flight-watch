@@ -136,6 +136,9 @@
 **一直没收到推送？**
 说明价格还没低于你的理想价，正常。每晚 9 点的日报能看到它确实在查。想测试推送，可以临时把 `max_price` 改高一点。
 
+**Actions 红叉，日志里写着 `Playwright does not support chromium on ubuntu26.04`？**
+GitHub 把默认云端系统升级了，需要固定成旧版本。打开你仓库的 `.github/workflows/flight-watch.yml` → 点铅笔图标，找到 `runs-on: ubuntu-latest`，改成 `runs-on: ubuntu-24.04`，Commit changes 保存即可。（最新的模板已经改好；这是在它之前复制的人才需要改。）
+
 **想立刻查一次？**
 Actions → 左边 flight-watch → 右边 **Run workflow** → 绿色按钮。
 

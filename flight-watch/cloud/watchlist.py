@@ -30,6 +30,7 @@ DEFAULTS = {
     "transfer_pref": "cheap",
     "max_duration_h": None,     # fast：全程最多几小时（None = 不限）
     "max_layover_h": None,      # fast：每次中转最多等几小时（None = 不限）
+    "low_margin": 2,            # 7 天新低推送：要比前低至少便宜多少澳元（0 = 只要更低就推）
     "stopover_city": "",        # stopover：停留城市代码，如 BKK
     "stopover_min_h": 12,       # stopover：至少停几小时
     "stopover_max_h": 48,       # stopover：最多停几小时
@@ -90,6 +91,10 @@ def normalize(entry):
         e[k] = None if e[k] in ("", None) else float(e[k])
         if e[k] is not None and e[k] <= 0:
             raise ValueError(f"{k} 必须大于 0")
+    try:
+        e["low_margin"] = max(0.0, float(e["low_margin"] if e["low_margin"] not in ("", None) else 2))
+    except (TypeError, ValueError):
+        raise ValueError("新低降幅要填数字（澳元）")
     e["stopover_city"] = str(e["stopover_city"] or "").strip().upper()
     e["stopover_min_h"] = float(e["stopover_min_h"] if e["stopover_min_h"] not in ("", None) else 12)
     e["stopover_max_h"] = float(e["stopover_max_h"] if e["stopover_max_h"] not in ("", None) else 48)
